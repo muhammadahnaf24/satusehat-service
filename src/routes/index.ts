@@ -1,9 +1,9 @@
 import { Router } from "express";
 import * as localController from "../controllers/localController";
-import * as satuSehatController from "../controllers/serviceRequestController";
+import * as serviceRequestController from "../controllers/serviceRequestController";
 const router = Router();
 
 router.get("/lab/:nobukti", localController.getPreviewData);
-router.post("/lab/bridge", satuSehatController.postLabToSatuSehat);
+router.post("/lab/bridge", serviceRequestController.postLabToSatuSehat);
 
 export default router;

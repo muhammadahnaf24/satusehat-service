@@ -2,11 +2,11 @@ import cron from "node-cron";
 import { processAutoBridging } from "./services/autoBridgingService";
 
 export const initScheduler = () => {
-  cron.schedule("*/5 * * * *", () => {
+  cron.schedule("* * * * *", () => {
     processAutoBridging();
   });
 
   console.log(
-    "🕒 [SYSTEM] Scheduler aktif: Bridging otomatis berjalan tiap 5 menit.",
+    "🕒 [SYSTEM] Scheduler aktif: Bridging otomatis berjalan tiap 1 menit.",
   );
 };

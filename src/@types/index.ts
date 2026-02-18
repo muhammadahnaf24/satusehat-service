@@ -20,6 +20,11 @@ export interface ISatuSehatConfig {
   organizationId: string;
 }
 
+export interface ILocalLabItem {
+  kd_loinc: string;
+  display_loinc: string;
+  txt_list: string;
+}
 export interface ILocalLab {
   noreg: string;
   norm: string;
@@ -31,9 +36,7 @@ export interface ILocalLab {
   nama_practitioner: string;
   id_performer: string;
   nama_performer: string;
-  kd_loinc: string;
-  display_loinc: string;
-  txt_list: string;
+  items: ILocalLabItem[];
 }
 
 export interface ISatuSehatToken {

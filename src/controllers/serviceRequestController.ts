@@ -2,7 +2,7 @@ import { Request, Response } from "express";
 import { ServiceRequestService } from "../services/serviceRequestService";
 import { getLocalLab } from "../services/localService";
 import { getToken } from "../utils/tokenManager";
-import { IApiResponse } from "../@types";
+import { IApiResponse, ILocalLab } from "../@types";
 
 export const postLabToSatuSehat = async (req: Request, res: Response) => {
   console.log("[postLabToSatuSehat] req.body:", req.body);
@@ -12,17 +12,16 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
     console.warn("[postLabToSatuSehat] nobukti tidak ditemukan");
     return res.status(400).json({
       success: false,
-      message:
-        "Parameter 'nobukti' wajib diisi dalam request body (Content-Type: application/json)",
+      message: "Parameter 'nobukti' wajib diisi dalam request body.",
     } as IApiResponse);
   }
 
   try {
     console.log(`[POST] 🔍 Mencari data lab dengan No Bukti: ${nobukti}`);
 
-    const localDataArray = await getLocalLab(nobukti as string);
+    const groupedData = await getLocalLab(nobukti as string);
 
-    if (!localDataArray || localDataArray.length === 0) {
+    if (!groupedData || groupedData.length === 0) {
       console.warn(`[POST] ⚠️ Data tidak ditemukan untuk: ${nobukti}`);
       return res.status(404).json({
         success: false,
@@ -32,7 +31,6 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
     }
 
     const token = await getToken();
-
     if (!token) {
       console.error("Token Satu Sehat tidak valid.");
       return res.status(500).json({
@@ -42,24 +40,17 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
     }
 
     const serviceRequestService = new ServiceRequestService();
-
     const results: any[] = [];
     const errors: any[] = [];
 
-    const groupedByLabsrid = localDataArray.reduce(
-      (acc, item) => {
-        if (!acc[item.labsrid]) {
-          acc[item.labsrid] = [];
-        }
-        acc[item.labsrid].push(item);
-        return acc;
-      },
-      {} as Record<string, typeof localDataArray>,
-    );
+    for (const transaction of groupedData) {
+      const labsrid = transaction.labsrid;
 
-    for (const labsrid in groupedByLabsrid) {
-      const itemsGroup = groupedByLabsrid[labsrid];
-      const invalidItems = itemsGroup.filter(
+      const validItems = transaction.items.filter(
+        (item) => item.kd_loinc && item.kd_loinc.trim() !== "",
+      );
+
+      const invalidItems = transaction.items.filter(
         (item) => !item.kd_loinc || item.kd_loinc.trim() === "",
       );
 
@@ -69,17 +60,12 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
         );
         invalidItems.forEach((item) => {
           errors.push({
-            labsrid: item.labsrid,
+            labsrid: labsrid,
             item: item.txt_list || "Unknown",
             message: `Kode LOINC tidak ditemukan untuk pemeriksaan: ${item.txt_list}`,
           });
         });
       }
-
-      const validItems = itemsGroup.filter(
-        (item) => item.kd_loinc && item.kd_loinc.trim() !== "",
-      );
-
       if (validItems.length === 0) {
         continue;
       }
@@ -88,8 +74,12 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
         `[SENDING] Mengirim ${validItems.length} item untuk labsrid: ${labsrid}`,
       );
 
+      const transactionToSend: ILocalLab = {
+        ...transaction,
+        items: validItems,
+      };
       const response = await serviceRequestService.createServiceRequest(
-        validItems,
+        transactionToSend,
         token,
       );
 
@@ -113,26 +103,30 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
         });
       }
     }
-    const totalProcessed = localDataArray.length;
+
+    const totalProcessed = groupedData.reduce(
+      (acc, curr) => acc + curr.items.length,
+      0,
+    );
     const totalSuccess = results.length;
     const totalError = errors.length;
+
     if (totalSuccess === 0 && totalError > 0) {
       return res.status(500).json({
         success: false,
-        message: "Semua item pemeriksaan gagal terkirim ke Satu Sehat.",
-        meta: { total_processed: totalProcessed },
+        message: "Semua transaksi gagal terkirim ke Satu Sehat.",
+        meta: { total_processed_items: totalProcessed },
         data: { errors },
       } as IApiResponse);
     }
-
     if (totalSuccess > 0 && totalError > 0) {
       return res.status(207).json({
         success: true,
-        message: `Berhasil sebagian: ${totalSuccess} sukses, ${totalError} gagal.`,
+        message: `Berhasil sebagian: ${totalSuccess} sukses, ${totalError} error (item/transaksi).`,
         meta: {
-          total_processed: totalProcessed,
-          success_count: totalSuccess,
-          fail_count: totalError,
+          total_processed_items: totalProcessed,
+          success_transaction_count: totalSuccess,
+          error_count: totalError,
         },
         data: { results, errors },
       } as IApiResponse);
@@ -140,8 +134,8 @@ export const postLabToSatuSehat = async (req: Request, res: Response) => {
 
     return res.status(200).json({
       success: true,
-      message: "Semua item berhasil dikirim ke Satu Sehat.",
-      meta: { total_processed: totalProcessed },
+      message: "Semua data berhasil dikirim ke Satu Sehat.",
+      meta: { total_processed_items: totalProcessed },
       data: { results },
     } as IApiResponse);
   } catch (error: any) {

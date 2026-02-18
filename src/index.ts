@@ -37,5 +37,5 @@ const startServer = async () => {
     process.exit(1);
   }
 };
-
+initScheduler();
 startServer();

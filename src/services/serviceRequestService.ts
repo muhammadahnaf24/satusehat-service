@@ -1,11 +1,13 @@
 import axios from "axios";
 import { ILocalLab, IServiceResponse, ISatuSehatConfig } from "../@types";
 import dotenv from "dotenv";
+import { ServiceRequest, CodeableConcept, Coding } from "fhir/r4";
 
 dotenv.config();
 
 export class ServiceRequestService {
   private config: ISatuSehatConfig;
+
   constructor() {
     this.config = {
       clientId: process.env.CLIENT_ID as string,
@@ -22,7 +24,7 @@ export class ServiceRequestService {
   }
 
   async createServiceRequest(
-    dataArray: ILocalLab[],
+    transactionData: ILocalLab,
     token: string,
   ): Promise<IServiceResponse> {
     try {
@@ -33,28 +35,26 @@ export class ServiceRequestService {
         };
       }
 
-      const baseData = dataArray[0];
-
-      const codingArray = dataArray.map((item) => ({
+      const codingArray: Coding[] = transactionData.items.map((item) => ({
         system: "http://loinc.org",
         code: item.kd_loinc,
         display: item.display_loinc,
       }));
 
-      const reasonCodeArray = [
-        ...new Set(dataArray.map((item) => item.txt_list)),
+      const reasonCodeArray: CodeableConcept[] = [
+        ...new Set(transactionData.items.map((item) => item.txt_list)),
       ]
         .filter((text) => text && text.trim() !== "")
         .map((text) => ({
           text: text,
         }));
 
-      const payload = {
+      const payload: ServiceRequest = {
         resourceType: "ServiceRequest",
         identifier: [
           {
             system: `http://sys-ids.kemkes.go.id/servicerequest/${this.config.organizationId}`,
-            value: baseData.labsrid,
+            value: transactionData.labsrid,
           },
         ],
         status: "active",
@@ -73,43 +73,37 @@ export class ServiceRequestService {
         ],
         code: {
           coding: codingArray,
-          text: `${dataArray.length} pemeriksaan lab`,
+          text: `${transactionData.items.length} pemeriksaan lab`,
         },
         subject: {
-          reference: `Patient/${baseData.id_pasien}`,
+          reference: `Patient/${transactionData.id_pasien}`,
         },
         encounter: {
-          reference: `Encounter/${baseData.id_encounter}`,
+          reference: `Encounter/${transactionData.id_encounter}`,
         },
-        occurrenceDateTime: baseData.tgl_transaksi,
-        authoredOn: baseData.tgl_transaksi,
+        occurrenceDateTime: transactionData.tgl_transaksi,
+        authoredOn: transactionData.tgl_transaksi,
         requester: {
-          reference: `Practitioner/${baseData.id_practitioner}`,
-          display: baseData.nama_practitioner,
+          reference: `Practitioner/${transactionData.id_practitioner}`,
+          display: transactionData.nama_practitioner,
         },
         performer: [
           {
-            reference: `Practitioner/${baseData.id_performer}`,
-            display: baseData.nama_performer,
+            reference: `Practitioner/${transactionData.id_performer}`,
+            display: transactionData.nama_performer,
           },
         ],
         reasonCode: reasonCodeArray,
       };
+
       const url = `${this.config.baseUrl}/ServiceRequest`;
 
       console.log("==========================================");
-      console.log(`📤 MENGIRIM SERVICEREQUEST (${dataArray.length} items)`);
+      console.log(
+        `📤 MENGIRIM SERVICEREQUEST (${transactionData.items.length} items)`,
+      );
+      console.log(`🆔 NoBukti: ${transactionData.labsrid}`);
       console.log("==========================================");
-      console.log("Items yang dikirim:");
-      dataArray.forEach((item, idx) => {
-        console.log(`  ${idx + 1}. ${item.txt_list} (LOINC: ${item.kd_loinc})`);
-      });
-      console.log("\nPayload Structure:");
-      console.log(`  - resourceType: ${payload.resourceType}`);
-      console.log(`  - labsrid: ${payload.identifier[0].value}`);
-      console.log(`  - coding count: ${payload.code.coding.length}`);
-      console.log(`  - reasonCode count: ${payload.reasonCode.length}`);
-      console.log("\nFull Payload:");
       console.log(JSON.stringify(payload, null, 2));
       console.log("==========================================");
 
@@ -126,9 +120,8 @@ export class ServiceRequestService {
         data: response.data,
       };
     } catch (error: any) {
-      const baseData = dataArray?.[0];
       console.error(
-        `[SATU SEHAT ERROR] Gagal kirim ServiceRequest (${baseData?.labsrid}):`,
+        `[SATU SEHAT ERROR] Gagal kirim ServiceRequest (${transactionData.labsrid}):`,
       );
 
       let errorMessage = error.message;
@@ -136,14 +129,12 @@ export class ServiceRequestService {
 
       if (error.response) {
         errorDetail = error.response.data;
-
         const issue = errorDetail?.issue?.[0];
         if (issue) {
           errorMessage = `[${issue.code}] ${issue.details?.text || issue.diagnostics}`;
         } else {
           errorMessage = `HTTP ${error.response.status} - ${error.response.statusText}`;
         }
-
         console.error("Detail Response:", JSON.stringify(errorDetail));
       }
 

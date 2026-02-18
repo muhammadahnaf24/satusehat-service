@@ -1,7 +1,7 @@
 import * as sql from "mssql";
 import axios from "axios";
 import { getPool } from "../config/db";
-import { ILocalLab, ILisResponse } from "../@types";
+import { ILocalLab, ILisResponse, ILocalLabItem } from "../@types";
 
 export const getLocalLab = async (nobukti: string): Promise<ILocalLab[]> => {
   try {
@@ -48,7 +48,7 @@ export const getLocalLab = async (nobukti: string): Promise<ILocalLab[]> => {
         try {
           const lisUrl = `${url_ws}${row.vc_norm}`;
           const apiRes = await axios.get<ILisResponse[]>(lisUrl, {
-            timeout: 10000,
+            timeout: 20000,
           });
           const lisHistory = apiRes.data;
 
@@ -71,30 +71,30 @@ export const getLocalLab = async (nobukti: string): Promise<ILocalLab[]> => {
           if (matchedItem) {
             console.log(`✅ MATCH FOUND! Transaksi: ${matchedItem.no_trans}`);
             if (matchedItem.Data && matchedItem.Data.length > 0) {
-              matchedItem.Data.forEach((labResult) => {
-                const loincCode = labResult.code_loinc || " ";
-                const loincDisplay = labResult.display_loinc || " ";
-                const txtList = labResult.nama_parameter || " ";
+              const labItems: ILocalLabItem[] = matchedItem.Data.map(
+                (labResult) => ({
+                  kd_loinc: labResult.code_loinc || " ",
+                  display_loinc: labResult.display_loinc || " ",
+                  txt_list: labResult.nama_parameter || " ",
+                }),
+              );
 
-                console.log(`  📋 Item: ${txtList} | LOINC: ${loincCode}`);
+              finalData.push({
+                noreg: row.vc_noreg,
+                norm: row.vc_norm,
+                labsrid: row.VC_NoBukti,
+                id_pasien: row.vc_idPatient,
+                id_encounter: row.vc_idEncounter,
+                tgl_transaksi: new Date(row.DT_TglTrans).toISOString(),
+                id_practitioner: row.vc_idPractitioner,
+                nama_practitioner: row.vc_namaPractitioner,
+                id_performer: row.performerid,
+                nama_performer: row.performername,
 
-                finalData.push({
-                  noreg: row.vc_noreg,
-                  norm: row.vc_norm,
-                  labsrid: row.VC_NoBukti,
-                  id_pasien: row.vc_idPatient,
-                  id_encounter: row.vc_idEncounter,
-                  tgl_transaksi: new Date(row.DT_TglTrans).toISOString(),
-                  id_practitioner: row.vc_idPractitioner,
-                  nama_practitioner: row.vc_namaPractitioner,
-                  id_performer: row.performerid,
-                  nama_performer: row.performername,
-
-                  kd_loinc: loincCode,
-                  display_loinc: loincDisplay,
-                  txt_list: txtList,
-                });
+                items: labItems,
               });
+
+              console.log(` 📋 Berhasil grouping ${labItems.length} item lab.`);
             }
           } else {
             console.log(
@@ -130,12 +130,13 @@ export const getUnsentLab = async () => {
   try {
     const pool = await getPool();
     const query = `
-      SELECT TOP 10 a.VC_NoBukti 
+      SELECT TOP 3 a.VC_NoBukti
       FROM LabNotaralan a
-      LEFT JOIN BridgingLog b ON a.VC_NoBukti = b.no_bukti
-      WHERE b.no_bukti IS NULL 
-      AND a.DT_TglTrans >= CAST(GETDATE() AS DATE
-      ORDER BY a.DT_TglTrans DESC
+      LEFT JOIN _SatSet_Lab b ON a.VC_NoBukti = b.vc_nobukti
+      WHERE b.vc_nobukti IS NULL
+      
+      and a.VC_NoBukti = '25010607010129'
+      ORDER BY a.DT_TglTrans;
     `;
 
     const result = await pool.request().query(query);
@@ -144,5 +145,51 @@ export const getUnsentLab = async () => {
   } catch (error) {
     console.error("[DB ERROR] Gagal mencari data pending:", error);
     return [];
+  }
+};
+
+export const updateSatuSehatStatus = async (
+  baseData: ILocalLab,
+  ssId: string,
+): Promise<void> => {
+  try {
+    const pool = await getPool();
+
+    const query = `     
+      INSERT INTO _SatSet_Lab (
+        vc_id_service_request, 
+        vc_id_encounter, 
+        vc_nobukti, 
+        vc_noreg, 
+        vc_norm, 
+        vc_authoredOn, 
+        dt_created_at
+      )
+      VALUES (
+        @ssid, 
+        @id_encounter, 
+        @nobukti, 
+        @noreg, 
+        @norm, 
+        @authoredOn, 
+        GETDATE()
+      )
+    `;
+
+    await pool
+      .request()
+      .input("ssid", sql.VarChar, ssId)
+      .input("id_encounter", sql.VarChar, baseData.id_encounter)
+      .input("nobukti", sql.VarChar, baseData.labsrid)
+      .input("noreg", sql.VarChar, baseData.noreg)
+      .input("norm", sql.VarChar, baseData.norm)
+      .input("authoredOn", sql.VarChar, baseData.tgl_transaksi)
+      .query(query);
+
+    console.log(
+      `💾 [DB SAVED] Data tersimpan di _SatSet_Lab untuk NoBukti: ${baseData.labsrid}`,
+    );
+  } catch (error) {
+    console.error(`❌ [DB ERROR] Gagal simpan ke _SatSet_Lab:`, error);
   }
 };

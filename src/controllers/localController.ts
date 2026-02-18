@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { getLocalLab } from "../services/localService";
-import { IApiResponse } from "../@types";
+import { IApiResponse, ILocalLab } from "../@types";
 
 export const getPreviewData = async (
   req: Request,
@@ -18,9 +18,9 @@ export const getPreviewData = async (
   try {
     console.log(`[PREVIEW] 🔍 Mencari data lab dengan No. Bukti: ${nobukti}`);
 
-    const data = await getLocalLab(nobukti as string);
+    const groupedData = await getLocalLab(nobukti as string);
 
-    if (!data || data.length === 0) {
+    if (!groupedData || groupedData.length === 0) {
       console.warn(`[PREVIEW] ⚠️ Data tidak ditemukan untuk: ${nobukti}`);
       return res.status(404).json({
         success: false,
@@ -28,25 +28,28 @@ export const getPreviewData = async (
         data: [],
       } as IApiResponse);
     }
+    const transaction = groupedData[0];
+    const allItems = transaction.items;
+    const responseData = groupedData;
 
-    const validCount = data.filter(
+    const validCount = allItems.filter(
       (item) => item.kd_loinc && item.kd_loinc.trim() !== "",
     ).length;
 
-    const invalidCount = data.length - validCount;
+    const invalidCount = allItems.length - validCount;
 
     console.log(
-      `[PREVIEW] ✅ Ditemukan ${data.length} data. Valid: ${validCount}, Invalid: ${invalidCount}`,
+      `[PREVIEW] ✅ Ditemukan ${allItems.length} data. Valid: ${validCount}, Invalid: ${invalidCount}`,
     );
 
     return res.status(200).json({
       success: true,
       message: `Preview Berhasil. Data Valid: ${validCount}`,
       meta: {
-        total_data: data.length,
+        total_data: allItems.length,
         filter_param: nobukti,
       },
-      data: data,
+      data: responseData,
     } as IApiResponse);
   } catch (error: any) {
     console.error("[PREVIEW ERROR] ❌:", error);
