@@ -230,7 +230,7 @@ export const getDataServiceRequest = async () => {
   try {
     const pool = await getPool();
     const query = `
-  
+  aaa
     `;
 
     const result = await pool.request().query(query);
