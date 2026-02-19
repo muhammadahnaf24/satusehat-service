@@ -24,12 +24,15 @@ export interface ILocalLabItem {
   kd_loinc: string;
   display_loinc: string;
   txt_list: string;
+  value: number;
+  unit: string;
 }
 export interface ILocalLab {
   noreg: string;
   norm: string;
   labsrid: string;
   id_pasien: string;
+  nama_pasien: string;
   id_encounter: string;
   tgl_transaksi: string;
   id_practitioner: string;
@@ -73,4 +76,14 @@ export interface ILisResponse {
   nama: string;
   no_rm: string;
   Data: ILisDataItem[];
+}
+
+export interface IDataServiceRequest {
+  id_service_request: string;
+  id_encounter: string;
+  nobukti: string;
+  noreg: string;
+  norm: string;
+  authored_on: string;
+  created_at: string;
 }

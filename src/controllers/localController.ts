@@ -1,6 +1,6 @@
 import { Request, Response } from "express";
 import { getLocalLab } from "../services/localService";
-import { IApiResponse, ILocalLab } from "../@types";
+import { IApiResponse } from "../@types";
 
 export const getPreviewData = async (
   req: Request,
@@ -28,10 +28,9 @@ export const getPreviewData = async (
         data: [],
       } as IApiResponse);
     }
+
     const transaction = groupedData[0];
     const allItems = transaction.items;
-    const responseData = groupedData;
-
     const validCount = allItems.filter(
       (item) => item.kd_loinc && item.kd_loinc.trim() !== "",
     ).length;
@@ -39,17 +38,17 @@ export const getPreviewData = async (
     const invalidCount = allItems.length - validCount;
 
     console.log(
-      `[PREVIEW] ✅ Ditemukan ${allItems.length} data. Valid: ${validCount}, Invalid: ${invalidCount}`,
+      `[PREVIEW] ✅ Ditemukan ${allItems.length} items. Valid: ${validCount}, Invalid: ${invalidCount}`,
     );
 
     return res.status(200).json({
       success: true,
       message: `Preview Berhasil. Data Valid: ${validCount}`,
       meta: {
-        total_data: allItems.length,
+        total_items: allItems.length,
         filter_param: nobukti,
       },
-      data: responseData,
+      data: groupedData,
     } as IApiResponse);
   } catch (error: any) {
     console.error("[PREVIEW ERROR] ❌:", error);

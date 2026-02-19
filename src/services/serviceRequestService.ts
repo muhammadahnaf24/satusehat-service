@@ -2,6 +2,7 @@ import axios from "axios";
 import { ILocalLab, IServiceResponse, ISatuSehatConfig } from "../@types";
 import dotenv from "dotenv";
 import { ServiceRequest, CodeableConcept, Coding } from "fhir/r4";
+import { logger } from "../utils/logger";
 
 dotenv.config();
 
@@ -99,12 +100,12 @@ export class ServiceRequestService {
       const url = `${this.config.baseUrl}/ServiceRequest`;
 
       console.log("==========================================");
-      console.log(
+      logger.info(
         `📤 MENGIRIM SERVICEREQUEST (${transactionData.items.length} items)`,
       );
-      console.log(`🆔 NoBukti: ${transactionData.labsrid}`);
-      console.log("==========================================");
-      console.log(JSON.stringify(payload, null, 2));
+      logger.info(`🆔 NoBukti: ${transactionData.labsrid}`);
+      logger.info("==========================================");
+      logger.info(JSON.stringify(payload, null, 2));
       console.log("==========================================");
 
       const response = await axios.post(url, payload, {
@@ -120,7 +121,7 @@ export class ServiceRequestService {
         data: response.data,
       };
     } catch (error: any) {
-      console.error(
+      logger.error(
         `[SATU SEHAT ERROR] Gagal kirim ServiceRequest (${transactionData.labsrid}):`,
       );
 
@@ -135,7 +136,7 @@ export class ServiceRequestService {
         } else {
           errorMessage = `HTTP ${error.response.status} - ${error.response.statusText}`;
         }
-        console.error("Detail Response:", JSON.stringify(errorDetail));
+        logger.error("Detail Response:", JSON.stringify(errorDetail));
       }
 
       return {

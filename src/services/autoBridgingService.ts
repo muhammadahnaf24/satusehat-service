@@ -1,93 +1,85 @@
-import {
-  getUnsentLab,
-  getLocalLab,
-  updateSatuSehatStatus,
-} from "./localService";
+import { getLocalLab, updateSatuSehatStatus } from "./localService";
 import { ServiceRequestService } from "./serviceRequestService";
 import { getToken } from "../utils/tokenManager";
-import { ILocalLab } from "../@types";
+import { ILocalLab, ILocalLabItem } from "../@types";
+import { logger } from "../utils/logger";
 
 export const processAutoBridging = async () => {
-  console.log("\n⏰ [CRON START] Memeriksa antrian bridging...");
+  logger.info("⏰ [CRON START] Memeriksa antrian bridging...");
 
   try {
-    const pendingList = await getUnsentLab();
-
-    if (pendingList.length === 0) {
-      console.log("✅ [CRON INFO] Tidak ada data antrian. System Idle.");
-      return;
-    }
-
-    console.log(
-      `🚀 [CRON ACTION] Ditemukan ${pendingList.length} transaksi pending.`,
-    );
-
     const token = await getToken();
     if (!token) {
-      console.error("❌ [CRON FATAL] Gagal mendapatkan token. Abort.");
+      logger.error("❌ [CRON FATAL] Gagal mendapatkan token. Abort.");
       return;
     }
 
     const serviceRequest = new ServiceRequestService();
 
-    for (const nobukti of pendingList) {
-      console.log(`👉 Processing NoBukti: ${nobukti}`);
+    try {
+      const groupedData = await getLocalLab();
 
-      try {
-        const groupedData = await getLocalLab(nobukti);
+      if (!groupedData || groupedData.length === 0) {
+        return;
+      }
 
-        if (!groupedData || groupedData.length === 0) {
-          console.warn(`⚠️ Data detail kosong untuk ${nobukti}, skip.`);
+      logger.info(
+        `🚀 [CRON ACTION] Memproses ${groupedData.length} transaksi pending.`,
+      );
+
+      for (const transaction of groupedData) {
+        if (
+          !transaction.id_pasien ||
+          !transaction.id_encounter ||
+          !transaction.id_practitioner
+        ) {
+          logger.warn(
+            `⚠️ [SKIP] ${transaction.labsrid}: Data Header tidak lengkap (Pasien/Encounter/Dokter ID kosong). Cek Mapping.`,
+          );
           continue;
         }
 
-        for (const transaction of groupedData) {
-          const validItems = transaction.items.filter(
-            (item) => item.kd_loinc && item.kd_loinc.trim() !== "",
+        const validItems = transaction.items.filter(
+          (item: ILocalLabItem) => item.kd_loinc && item.kd_loinc.trim() !== "",
+        );
+
+        if (validItems.length === 0) {
+          logger.warn(
+            `⚠️ [SKIP] ${transaction.labsrid}: Tidak ada item lab dengan kode LOINC valid.`,
           );
-
-          if (validItems.length === 0) {
-            console.warn(
-              `⚠️ Skip ${nobukti}: Tidak ada item lab dengan kode LOINC valid.`,
-            );
-            continue;
-          }
-
-          const transactionToSend: ILocalLab = {
-            ...transaction,
-            items: validItems,
-          };
-
-          console.log(
-            `📤 Sending ${validItems.length} items for ${transaction.labsrid}...`,
-          );
-
-          const response = await serviceRequest.createServiceRequest(
-            transactionToSend,
-            token,
-          );
-
-          if (response.success && response.data?.id) {
-            const idServiceRequest = response.data.id;
-
-            console.log(
-              `✅ [SUCCESS] ID: ${idServiceRequest} untuk NoBukti: ${transaction.labsrid}`,
-            );
-
-            await updateSatuSehatStatus(transaction, idServiceRequest);
-          } else {
-            console.error(
-              `❌ [FAIL] Gagal kirim ${transaction.labsrid}: ${response.message}`,
-            );
-          }
+          continue;
         }
-      } catch (err) {
-        console.error(`🔥 [EXCEPTION] Error pada ${nobukti}:`, err);
+
+        const transactionToSend: ILocalLab = {
+          ...transaction,
+          items: validItems,
+        };
+
+        const response = await serviceRequest.createServiceRequest(
+          transactionToSend,
+          token,
+        );
+
+        if (response.success && response.data?.id) {
+          const idServiceRequest = response.data.id;
+
+          logger.info(
+            `✅ [SENT] ${transaction.labsrid} -> ID: ${idServiceRequest}`,
+          );
+
+          await updateSatuSehatStatus(transaction, idServiceRequest);
+        } else {
+          logger.error(
+            `❌ [FAIL] ${transaction.labsrid} -> Msg: ${response.message}`,
+          );
+        }
       }
+    } catch (err: any) {
+      logger.error(`🔥 [EXCEPTION] Error di loop transaksi: ${err.message}`);
     }
-  } catch (globalError) {
-    console.error("🔥 [CRON ERROR] Terjadi kesalahan fatal:", globalError);
+  } catch (globalError: any) {
+    logger.error(`🔥 [CRON ERROR] Fatal Crash: ${globalError.message}`);
   }
 
-  console.log("🏁 [CRON FINISH] Batch selesai.\n");
+  logger.info("🏁 [CRON FINISH] Batch selesai.");
 };
