@@ -230,7 +230,7 @@ export const getDataServiceRequest = async () => {
   try {
     const pool = await getPool();
     const query = `
-      SELECT * FROM _SatSet_ServiceRequest
+  
     `;
 
     const result = await pool.request().query(query);
