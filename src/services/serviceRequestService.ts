@@ -3,6 +3,7 @@ import { ILocalLab, IServiceResponse, ISatuSehatConfig } from "../@types";
 import dotenv from "dotenv";
 import { ServiceRequest, CodeableConcept, Coding } from "fhir/r4";
 import { logger } from "../utils/logger";
+import { Console } from "winston/lib/winston/transports";
 
 dotenv.config();
 
@@ -17,10 +18,9 @@ export class ServiceRequestService {
       baseUrl: process.env.BASE_URL_SATSET as string,
       organizationId: process.env.ORG_ID as string,
     };
+
     if (!this.config.baseUrl || !this.config.organizationId) {
-      console.warn(
-        "⚠️ FATAL: Environment Variable BASE_URL_SATSET atau ORG_ID tidak terbaca!",
-      );
+      logger.error("[ENV_MISSING] BASE_URL_SATSET atau ORG_ID tidak terbaca!");
     }
   }
 
@@ -99,14 +99,11 @@ export class ServiceRequestService {
 
       const url = `${this.config.baseUrl}/ServiceRequest`;
 
-      console.log("==========================================");
       logger.info(
-        `📤 MENGIRIM SERVICEREQUEST (${transactionData.items.length} items)`,
+        `[API_SEND_REQ] NoBukti: ${transactionData.labsrid} | Items: ${transactionData.items.length}`,
       );
-      logger.info(`🆔 NoBukti: ${transactionData.labsrid}`);
-      logger.info("==========================================");
-      logger.info(JSON.stringify(payload, null, 2));
-      console.log("==========================================");
+      logger.info(`[API_PAYLOAD] ${JSON.stringify(payload)}`);
+      console.log(`[API_PAYLOAD] \n${JSON.stringify(payload, null, 2)}`);
 
       const response = await axios.post(url, payload, {
         headers: {
@@ -121,10 +118,6 @@ export class ServiceRequestService {
         data: response.data,
       };
     } catch (error: any) {
-      logger.error(
-        `[SATU SEHAT ERROR] Gagal kirim ServiceRequest (${transactionData.labsrid}):`,
-      );
-
       let errorMessage = error.message;
       let errorDetail = null;
 
@@ -136,7 +129,14 @@ export class ServiceRequestService {
         } else {
           errorMessage = `HTTP ${error.response.status} - ${error.response.statusText}`;
         }
-        logger.error("Detail Response:", JSON.stringify(errorDetail));
+      }
+
+      logger.error(
+        `[API_SEND_ERROR] NoBukti: ${transactionData.labsrid} | Msg: ${errorMessage}`,
+      );
+
+      if (errorDetail) {
+        logger.error(`[API_ERROR_DETAIL] ${JSON.stringify(errorDetail)}`);
       }
 
       return {
