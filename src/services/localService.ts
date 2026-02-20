@@ -32,7 +32,7 @@ export const getSqlQueue = async (nobukti?: string) => {
             INNER JOIN _SatSet_Encounter b ON a.VC_NoReg = b.vc_noReg
             INNER JOIN RMKUNJUNG c ON a.VC_NoReg = c.vc_no_regj
             LEFT JOIN _SatSet_Lab d ON a.VC_NoBukti = d.vc_nobukti 
-            WHERE c.dt_tgl_reg BETWEEN '2025-05-01' AND '2025-05-10' AND d.vc_nobukti IS NULL
+            WHERE c.dt_tgl_reg BETWEEN '2025-05-04' AND '2025-05-08' AND d.vc_nobukti IS NULL
             ORDER BY a.DT_TglTrans
         `;
     }

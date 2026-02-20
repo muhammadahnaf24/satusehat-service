@@ -3,7 +3,6 @@ import { ILocalLab, IServiceResponse, ISatuSehatConfig } from "../@types";
 import dotenv from "dotenv";
 import { ServiceRequest, CodeableConcept, Coding } from "fhir/r4";
 import { logger } from "../utils/logger";
-import { Console } from "winston/lib/winston/transports";
 
 dotenv.config();
 
